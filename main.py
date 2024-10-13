@@ -1,5 +1,4 @@
-#Here are some libraries you're likely to use. You might want/need others as well.
-#%%
+# import library
 import re
 import sys
 import json
@@ -9,7 +8,7 @@ from math import log
 from collections import defaultdict
 import argparse
 
-#%%
+# add argument to specify training & output path
 parser = argparse.ArgumentParser(  
         description='sum the integers at the command line'
     )  
@@ -19,7 +18,6 @@ parser.add_argument(
     default="dataset/assignment1-data",
     help='training path folder'
 )
-
 parser.add_argument(  
     'output_path', 
     type=str, 
@@ -27,29 +25,24 @@ parser.add_argument(
     help='training path folder',
 )
 
-#%%
-# preprocessing lines
 def preprocess_line(line):
+    # function to preprocess lines
     # add <bos> and <eos> in end of Line
+    
     line = re.sub('[^A-Za-z0-9 .#]+', '', line)
     line = re.sub('[0-9]', '0', line).lower()
     return ("##"+line+"##")
 
-#%%
-#This bit of code gives an example of how you might extract trigram counts
-#from a file, line by line. If you plan to use or modify this code,
-#please ensure you understand what it is actually doing, especially at the
-#beginning and end of each line. Depending on how you write the rest of
-#your program, you may need to modify this code.
 
 def generate_trigrams_model(infile, outfile_tr, outfile_bg):
+    # function to generate trigram model, 
+    # calculate and save trigram with respect to its bigram
+    
     tri_counts=defaultdict(int) #counts of all trigrams in input
-    big_counts=defaultdict(int)
+    big_counts=defaultdict(int) #counts of all bigrams in input
     with open(infile) as f:
         for line in f:
             line = preprocess_line(line)
-            # line += "#"
-            print(line)
             for j in range(len(line)-(2)): 
                 trigram = line[j:j+3]
                 bigram = line[j:j+2]
@@ -57,18 +50,16 @@ def generate_trigrams_model(infile, outfile_tr, outfile_bg):
                 big_counts[bigram] += 1
             # add the last bigrams
             big_counts[line[-2:]] += 1
-
-    # length_dict = len(tri_counts.keys())
+    
+    # loop to calculate probability foreach trigram (given bigram)
+    # count(num of trigram) / count(num of its bigram)
     for key, val in tri_counts.items():
         tmp = []
         tmp.append(val)
         tmp.append(val / big_counts[key[:-1]])
         tri_counts[key] = tmp
         
-    #Some example code that prints out the counts. For small input files
-    #the counts are easy to look at but for larger files you can redirect
-    #to an output file (see Lab 1).
-    # also save probability model to files, sorted alphabetically
+    # also save probability model (trigram, bigram) to files, sorted alphabetically
     print("Trigram counts in ", infile, ", sorted alphabetically:")
     with open(outfile_tr, 'w') as f:
         for key in sorted(tri_counts.keys()):
@@ -87,8 +78,11 @@ def generate_trigrams_model(infile, outfile_tr, outfile_bg):
             f.writelines(tmp)
     
 
-#%%
 def load_model(model_path, type="pretrain"):
+    # function to load model from file
+    # differentiate between trigram, bigram, and pretrain files
+    # different format foreach models
+    
     try:
         if type == "trigram":
             with open(model_path, 'r') as f:
@@ -109,8 +103,11 @@ def load_model(model_path, type="pretrain"):
         return('needs to specify specific path, file not found in default path!')
     return model
 
-#%%    
+    
 def generate_from_LLM(char_length):
+    # function to generate trigram randomly
+    # to compare between pre-train and trained model
+    
     # load pre-train model
     pretrain_model = load_model('dataset/assignment1-data/model-br.en', type="pretrain")
     
@@ -121,11 +118,13 @@ def generate_from_LLM(char_length):
     random_pretrain = random.sample(pretrain_model.keys(), char_length//3)
     random_trained = random.sample(trained_model.keys(), char_length//3)
     
-    # return pretrain_model, trained_model
     return random_pretrain, random_trained
 
-#%%
+
 def perplexity_test_sentences_skipped(test_file):
+    # calculate perplexity on test sentences
+    # but this time ignore unknown word
+    
     # load trained model from 3 languages
     # trained en model
     trained_tr_model_en = load_model('output/model-tr.en', type="trigram")
@@ -151,6 +150,7 @@ def perplexity_test_sentences_skipped(test_file):
         print(f'File not found in the {test_file} path!')
     
     # looping to calculate perplexity from 3 models
+    # if not found, skipped
     result_dict = dict()
     for it, trigrams in enumerate(sentences):
         en_list, de_list, es_list = [], [], []
@@ -178,14 +178,15 @@ def perplexity_test_sentences_skipped(test_file):
         } 
     
     return result_dict
-#%%
+
 def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
-    # load trained model from 3 languages
+    # calculate perplexity on test sentences
+    # but this time calculate unknown/known word using smoothing
     # alpha = 1
     # N_trigram => count corpus keys (trigram)
     # N_bigram => count corpus keys (bigram)
     # V => length corpus keys (distinct) => trigram
-    # trained en model
+    
     # load trained model from 3 languages
     # trained en model
     trained_tr_model_en = load_model('output/model-tr.en', type="trigram")
@@ -251,10 +252,13 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
     
     return result_dict
 
-# %%
+# main function
 if __name__ == 'main':
+    # parse argument
     args = parser.parse_args()
     
+    # looping all files:
+    # train and generate trigram models foreach dataset
     for files in ['en', 'de', 'es']:
         # infile = f'dataset/assignment1-data/training.{files}'
         infile = f'{args.training_path}/training.{files}'
@@ -262,14 +266,12 @@ if __name__ == 'main':
         outfile_bg = f'{args.output_path}/model-bg.{files}'
         print(f'processing {files} language..')
         generate_trigrams_model(infile=infile, outfile_tr=outfile_tr, outfile_bg=outfile_bg)
-    # %%
+    
+    # calculate perplexity on test set, smoothing and skip
     perplexity_test_sentences_smoothing('dataset/assignment1-data/test')
-    # %%
     perplexity_test_sentences_skipped('dataset/assignment1-data/test')
-    #%%
+    
+    # get random trigrams from pre-train and trained model 
     pretrain, train = generate_from_LLM(300)
-    #%%
     print("pretrain\n", pretrain)
-    # %%
     print("train\n", train)
-# %%
