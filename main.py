@@ -30,7 +30,7 @@ parser.add_argument(
 #%%
 # preprocessing lines
 def preprocess_line(line):
-    # add <eos> in end of Line
+    # add <bos> and <eos> in end of Line
     line = re.sub('[^A-Za-z0-9 .#]+', '', line)
     line = re.sub('[0-9]', '0', line).lower()
     return ("##"+line+"##")
