@@ -33,7 +33,7 @@ def preprocess_line(line):
     # add <eos> in end of Line
     line = re.sub('[^A-Za-z0-9 .#]+', '', line)
     line = re.sub('[0-9]', '0', line).lower()
-    return (line+"#")
+    return ("##"+line+"##")
 
 #%%
 #This bit of code gives an example of how you might extract trigram counts
