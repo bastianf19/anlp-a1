@@ -5,6 +5,7 @@ import json
 import random
 import numpy as np
 from math import log
+from collections import Counter
 from collections import defaultdict
 import argparse
 
@@ -252,6 +253,21 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
     
     return result_dict
 
+def language_detect(perplexity):
+    # function to decide how many number of sentences foreach language
+    # iterate dictionary results from the perplexity calculation function
+    res = []
+    for key, dict2 in perplexity.items():
+        # the lower, the better
+        mn = 999999
+        lang = ''
+        for key, val in dict2.items():
+            if val < mn:
+                mn = val
+                lang = key
+        res.append(lang)
+    return Counter(res)
+
 # main function
 if __name__ == 'main':
     # parse argument
@@ -268,8 +284,16 @@ if __name__ == 'main':
         generate_trigrams_model(infile=infile, outfile_tr=outfile_tr, outfile_bg=outfile_bg)
     
     # calculate perplexity on test set, smoothing and skip
-    perplexity_test_sentences_smoothing('dataset/assignment1-data/test')
-    perplexity_test_sentences_skipped('dataset/assignment1-data/test')
+    smoothing = perplexity_test_sentences_smoothing('dataset/assignment1-data/test')
+    skipped = perplexity_test_sentences_skipped('dataset/assignment1-data/test')
+    
+    print("smoothing\n")
+    print(language_detect(smoothing))
+    print(smoothing)
+    
+    print("skipped\n")
+    print(language_detect(skipped))
+    print(skipped)
     
     # get random trigrams from pre-train and trained model 
     pretrain, train = generate_from_LLM(300)
