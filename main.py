@@ -185,37 +185,37 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
         # en_list, de_list, es_list = [], [], []
         for trig in trigrams:
             try:
-                en_list.append(log10(trained_tr_model_en[trig][0]))
+                en_list.append(trained_tr_model_en[trig][0])
             except KeyError:
                 try:
                     big_unk = trained_bg_model_en[trig[:-1]]
-                    en_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_en)))
+                    en_list.append((0 + alpha) / (big_unk + alpha * V_tr_en))
                 except KeyError:
-                    en_list.append(log10((0 + alpha) / (0 + alpha * V_tr_en)))
+                    en_list.append((0 + alpha) / (0 + alpha * V_tr_en))
                     
             try:
-                de_list.append(log10(trained_tr_model_de[trig][0]))
+                de_list.append(trained_tr_model_de[trig][0])
             except KeyError:
                 # de_list.append((N_tr_de + alpha) / (N_bg_de + alpha * V_tr_de))
                 try:
                     big_unk = trained_bg_model_de[trig[:-1]]
-                    de_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_de)))
+                    de_list.append((0 + alpha) / (big_unk + alpha * V_tr_de))
                 except KeyError:
-                    de_list.append(log10((0 + alpha) / (0 + alpha * V_tr_de)))
+                    de_list.append((0 + alpha) / (0 + alpha * V_tr_de))
                     
             try:
-                es_list.append(log10(trained_tr_model_es[trig][0]))
+                es_list.append(trained_tr_model_es[trig][0])
             except KeyError:
                 # es_list.append((N_tr_es + alpha) / (N_bg_es + alpha * V_tr_es))
                 try:
                     big_unk = trained_bg_model_es[trig[:-1]]
-                    es_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_es)))
+                    es_list.append((0 + alpha) / (big_unk + alpha * V_tr_es))
                 except KeyError:
-                    es_list.append(log10((0 + alpha) / (0 + alpha * V_tr_es)))
+                    es_list.append((0 + alpha) / (0 + alpha * V_tr_es))
                 
-    en_score = (1/len(en_list)) * (np.sum(en_list))
-    de_score = (1/len(de_list)) * (np.sum(de_list))
-    es_score = (1/len(es_list)) * (np.sum(es_list))
+    en_score = (-1/len(en_list)) * (np.sum(np.log2(en_list)))
+    de_score = (-1/len(de_list)) * (np.sum(np.log2(de_list)))
+    es_score = (-1/len(es_list)) * (np.sum(np.log2(es_list)))
     
     result_dict = {
         "en": en_score,
