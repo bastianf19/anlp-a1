@@ -4,7 +4,7 @@ import sys
 import json
 import random
 import numpy as np
-from math import log
+from math import log, log10
 from collections import Counter
 from collections import defaultdict
 import argparse
@@ -14,16 +14,22 @@ parser = argparse.ArgumentParser(
         description='sum the integers at the command line'
     )  
 parser.add_argument(  
-    'training_path', 
+    '--training_path', 
     type=str, 
     default="dataset/assignment1-data",
     help='training path folder'
 )
 parser.add_argument(  
-    'output_path', 
+    '--output_path', 
     type=str, 
     default="output",
     help='training path folder',
+)
+parser.add_argument(  
+    '--alpha', 
+    type=float, 
+    default=1.0,
+    help='which alpha to use (default: 1.0)',
 )
 
 def preprocess_line(line):
@@ -32,10 +38,10 @@ def preprocess_line(line):
     
     line = re.sub('[^A-Za-z0-9 .#]+', '', line)
     line = re.sub('[0-9]', '0', line).lower()
-    return ("##"+line+"##")
+    return ("##"+line+"#")
 
 
-def generate_trigrams_model(infile, outfile_tr, outfile_bg):
+def generate_trigrams_model(infile, outfile_tr, outfile_bg, alpha=1.0):
     # function to generate trigram model, 
     # calculate and save trigram with respect to its bigram
     
@@ -57,24 +63,24 @@ def generate_trigrams_model(infile, outfile_tr, outfile_bg):
     for key, val in tri_counts.items():
         tmp = []
         tmp.append(val)
-        tmp.append(val / big_counts[key[:-1]])
+        tmp.append((val + alpha) / (big_counts[key[:-1]] + alpha * len(tri_counts)))
         tri_counts[key] = tmp
         
     # also save probability model (trigram, bigram) to files, sorted alphabetically
-    print("Trigram counts in ", infile, ", sorted alphabetically:")
+    # print("Trigram counts in ", infile, ", sorted alphabetically:")
     with open(outfile_tr, 'w') as f:
         for key in sorted(tri_counts.keys()):
-            print(key, ": ", tri_counts[key])
+            # print(key, ": ", tri_counts[key])
             tmp = f'{key}\t{format(tri_counts[key][1], ".3e")}\t{tri_counts[key][0]}\n'
             f.writelines(tmp)
         f.close()
-    print("Trigram counts in ", infile, ", sorted numerically:")
-    for tri_count in sorted(tri_counts.items(), key=lambda x:x[1], reverse = True):
-        print(tri_count[0], ": ", str(tri_count[1]))
-    print("writing bigrams to file")
+    # print("Trigram counts in ", infile, ", sorted numerically:")
+    # for tri_count in sorted(tri_counts.items(), key=lambda x:x[1], reverse = True):
+    #     print(tri_count[0], ": ", str(tri_count[1]))
+    # print("writing bigrams to file")
     with open(outfile_bg, "w") as f:
         for key in sorted(big_counts.keys()):
-            print(key, ": ", big_counts[key])
+            # print(key, ": ", big_counts[key])
             tmp = f'{key}\t{big_counts[key]}\n'
             f.writelines(tmp)
     
@@ -105,109 +111,57 @@ def load_model(model_path, type="pretrain"):
     return model
 
     
-def generate_from_LLM(char_length):
-    # function to generate trigram randomly
-    # to compare between pre-train and trained model
+def generate_from_LLM(model, char_length):
+    # Function to generate trigram-based sequences from a given model
     
-    # load pre-train model
-    pretrain_model = load_model('dataset/assignment1-data/model-br.en', type="pretrain")
+    current_bigram = "##"  # This represents the beginning of a sentence
+    generated_sequence = [current_bigram]  # Store generated characters
     
-    # load trained model
-    trained_model = load_model('output/model-tr.en', type="trigram")
-    
-    # char_length needs to be devided by 3 since the model is trigram (3-chars per keys)
-    random_pretrain = random.sample(pretrain_model.keys(), char_length//3)
-    random_trained = random.sample(trained_model.keys(), char_length//3)
-    
-    return random_pretrain, random_trained
-
-
-def perplexity_test_sentences_skipped(test_file):
-    # calculate perplexity on test sentences
-    # but this time ignore unknown word
-    
-    # load trained model from 3 languages
-    # trained en model
-    trained_tr_model_en = load_model('output/model-tr.en', type="trigram")
-    trained_bg_model_en = load_model('output/model-bg.en', type="bigram")
-    # trained de model
-    trained_tr_model_de = load_model('output/model-tr.de', type="trigram")
-    trained_bg_model_de = load_model('output/model-bg.de', type="bigram")
-    # trained es model
-    trained_tr_model_es = load_model('output/model-tr.es', type="trigram")
-    trained_bg_model_es = load_model('output/model-bg.es', type="bigram")
-    
-    # load test file, process into trigram
-    try:
-        sentences = []
-        with open(test_file, 'r') as f:
-            for line in f:
-                trigram = []
-                line = preprocess_line(line)
-                for j in range(len(line)-(2)):
-                    trigram.append(line[j:j+3])
-                sentences.append(trigram)
-    except FileNotFoundError:
-        print(f'File not found in the {test_file} path!')
-    
-    # looping to calculate perplexity from 3 models
-    # if not found, skipped
-    result_dict = dict()
-    for it, trigrams in enumerate(sentences):
-        en_list, de_list, es_list = [], [], []
-        for trig in trigrams:
-            try:
-                en_list.append(trained_tr_model_en[trig][0])
-            except KeyError:
-                continue
-            try:
-                de_list.append(trained_tr_model_de[trig][0])
-            except KeyError:
-                continue
-            try:
-                es_list.append(trained_tr_model_es[trig][0])
-            except KeyError:
-                continue
-        en_score = np.prod(en_list) ** (-1/len(en_list))
-        de_score = np.prod(de_list) ** (-1/len(de_list))
-        es_score = np.prod(es_list) ** (-1/len(es_list))
+    for _ in range(char_length - 2):  # Adjust length since we start with a bigram
+        # Filter trigrams that start with the current bigram
+        possible_trigrams = {key: value for key, value in model.items() if key.startswith(current_bigram)}
         
-        result_dict[it] = {
-            "en": en_score,
-            "de": de_score,
-            "es": es_score,
-        } 
+        if not possible_trigrams:
+            break  # No more possible trigrams, stop generation
+        
+        # Randomly select the next trigram based on probabilities, handling both float and list types
+        trigrams, probabilities = zip(*[
+            (trigram, value[1] if isinstance(value, list) else value)  # Handle floats for pretrain model and lists for trained model
+            for trigram, value in possible_trigrams.items()
+        ])
+        
+        # Sample the next trigram based on probability distribution
+        next_trigram = random.choices(trigrams, probabilities)[0]
+        
+        # Append the new character (the third character in the trigram)
+        generated_sequence.append(next_trigram[-1])
+        
+        # Update the bigram to the last two characters of the selected trigram
+        current_bigram = next_trigram[-2:]
     
-    return result_dict
+    # Join the sequence into a string and return
+    return ''.join(generated_sequence)
 
 def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
     # calculate perplexity on test sentences
     # but this time calculate unknown/known word using smoothing
     # alpha = 1
-    # N_trigram => count corpus keys (trigram)
-    # N_bigram => count corpus keys (bigram)
     # V => length corpus keys (distinct) => trigram
     
     # load trained model from 3 languages
     # trained en model
     trained_tr_model_en = load_model('output/model-tr.en', type="trigram")
     trained_bg_model_en = load_model('output/model-bg.en', type="bigram")
-    N_tr_en = float(np.sum([val[1] for key, val in trained_tr_model_en.items()]))
-    N_bg_en = float(np.sum([val for key, val in trained_bg_model_en.items()]))
     V_tr_en = float(len(trained_tr_model_en.keys()))
     
     # trained de model
     trained_tr_model_de = load_model('output/model-tr.de', type="trigram")
     trained_bg_model_de = load_model('output/model-bg.de', type="bigram")
-    N_tr_de = float(np.sum([val[1] for key, val in trained_tr_model_de.items()]))
-    N_bg_de = float(np.sum([val for key, val in trained_bg_model_de.items()]))
     V_tr_de = float(len(trained_tr_model_de.keys()))
     
     # trained es model
     trained_tr_model_es = load_model('output/model-tr.es', type="trigram")
     trained_bg_model_es = load_model('output/model-bg.es', type="bigram")
-    N_tr_es = float(np.sum([val[1] for key, val in trained_tr_model_es.items()]))
-    N_bg_es = float(np.sum([val for key, val in trained_bg_model_es.items()]))
     V_tr_es = float(len(trained_tr_model_es.keys()))
 
     # load test file, process into trigram
@@ -217,6 +171,7 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
             for line in f:
                 trigram = []
                 line = preprocess_line(line)
+                # print(line)
                 for j in range(len(line)-(2)):
                     trigram.append(line[j:j+3])
                 sentences.append(trigram)
@@ -225,77 +180,76 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
     
     # looping to calculate perplexity from 3 models
     result_dict = dict()
-    for it, trigrams in enumerate(sentences):
-        en_list, de_list, es_list = [], [], []
+    en_list, de_list, es_list = [], [], []
+    for trigrams in sentences:
+        # en_list, de_list, es_list = [], [], []
         for trig in trigrams:
             try:
-                en_list.append(trained_tr_model_en[trig][0])
+                en_list.append(log10(trained_tr_model_en[trig][0]))
             except KeyError:
-                en_list.append((N_tr_en + alpha) / (N_bg_en + alpha * V_tr_en))
+                try:
+                    big_unk = trained_bg_model_en[trig[:-1]]
+                    en_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_en)))
+                except KeyError:
+                    en_list.append(log10((0 + alpha) / (0 + alpha * V_tr_en)))
+                    
             try:
-                de_list.append(trained_tr_model_de[trig][0])
+                de_list.append(log10(trained_tr_model_de[trig][0]))
             except KeyError:
-                de_list.append((N_tr_de + alpha) / (N_bg_de + alpha * V_tr_de))
+                # de_list.append((N_tr_de + alpha) / (N_bg_de + alpha * V_tr_de))
+                try:
+                    big_unk = trained_bg_model_de[trig[:-1]]
+                    de_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_de)))
+                except KeyError:
+                    de_list.append(log10((0 + alpha) / (0 + alpha * V_tr_de)))
+                    
             try:
-                es_list.append(trained_tr_model_es[trig][0])
+                es_list.append(log10(trained_tr_model_es[trig][0]))
             except KeyError:
-                es_list.append((N_tr_es + alpha) / (N_bg_es + alpha * V_tr_es))
+                # es_list.append((N_tr_es + alpha) / (N_bg_es + alpha * V_tr_es))
+                try:
+                    big_unk = trained_bg_model_es[trig[:-1]]
+                    es_list.append(log10((0 + alpha) / (big_unk + alpha * V_tr_es)))
+                except KeyError:
+                    es_list.append(log10((0 + alpha) / (0 + alpha * V_tr_es)))
                 
-        en_score = np.prod(en_list) ** (-1/len(en_list))
-        de_score = np.prod(de_list) ** (-1/len(de_list))
-        es_score = np.prod(es_list) ** (-1/len(es_list))
-        
-        result_dict[it] = {
-            "en": en_score,
-            "de": de_score,
-            "es": es_score,
-        } 
+    en_score = (1/len(en_list)) * (np.sum(en_list))
+    de_score = (1/len(de_list)) * (np.sum(de_list))
+    es_score = (1/len(es_list)) * (np.sum(es_list))
+    
+    result_dict = {
+        "en": en_score,
+        "de": de_score,
+        "es": es_score,
+    } 
     
     return result_dict
 
-def language_detect(perplexity):
-    # function to decide how many number of sentences foreach language
-    # iterate dictionary results from the perplexity calculation function
-    res = []
-    for key, dict2 in perplexity.items():
-        # the lower, the better
-        mn = 999999
-        lang = ''
-        for key, val in dict2.items():
-            if val < mn:
-                mn = val
-                lang = key
-        res.append(lang)
-    return Counter(res)
-
 # main function
-if __name__ == 'main':
+if __name__ == '__main__':
     # parse argument
     args = parser.parse_args()
     
     # looping all files:
     # train and generate trigram models foreach dataset
+    print(f"alpha to use: {args.alpha}")
     for files in ['en', 'de', 'es']:
         # infile = f'dataset/assignment1-data/training.{files}'
         infile = f'{args.training_path}/training.{files}'
         outfile_tr = f'{args.output_path}/model-tr.{files}'
         outfile_bg = f'{args.output_path}/model-bg.{files}'
         print(f'processing {files} language..')
-        generate_trigrams_model(infile=infile, outfile_tr=outfile_tr, outfile_bg=outfile_bg)
+        generate_trigrams_model(infile=infile, outfile_tr=outfile_tr, outfile_bg=outfile_bg, alpha=args.alpha)
     
     # calculate perplexity on test set, smoothing and skip
-    smoothing = perplexity_test_sentences_smoothing('dataset/assignment1-data/test')
-    skipped = perplexity_test_sentences_skipped('dataset/assignment1-data/test')
+    smoothing = perplexity_test_sentences_smoothing('dataset/assignment1-data/test', alpha=args.alpha)
+    print("smoothing: ", smoothing)
     
-    print("smoothing\n")
-    print(language_detect(smoothing))
-    print(smoothing)
+    # get random trigrams from pre-train and trained model
+    trained_model = load_model('output/model-tr.en', type="trigram") 
+    pretrain_model = load_model('dataset/assignment1-data/model-br.en', type="pretrain")
     
-    print("skipped\n")
-    print(language_detect(skipped))
-    print(skipped)
-    
-    # get random trigrams from pre-train and trained model 
-    pretrain, train = generate_from_LLM(300)
+    train = generate_from_LLM(trained_model, 300)
+    pretrain = generate_from_LLM(pretrain_model, 300)
     print("pretrain\n", pretrain)
     print("train\n", train)
