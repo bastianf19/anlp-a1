@@ -213,9 +213,9 @@ def perplexity_test_sentences_smoothing(test_file, alpha=1.0):
                 except KeyError:
                     es_list.append((0 + alpha) / (0 + alpha * V_tr_es))
                 
-    en_score = (-1/len(en_list)) * (np.sum(np.log2(en_list)))
-    de_score = (-1/len(de_list)) * (np.sum(np.log2(de_list)))
-    es_score = (-1/len(es_list)) * (np.sum(np.log2(es_list)))
+    en_score = 2 ** ((-1/len(en_list)) * (np.sum(np.log2(en_list))))
+    de_score = 2 ** ((-1/len(de_list)) * (np.sum(np.log2(de_list))))
+    es_score = 2 ** ((-1/len(es_list)) * (np.sum(np.log2(es_list))))
     
     result_dict = {
         "en": en_score,
